@@ -1,0 +1,117 @@
+-- Create the main GUI container
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "WalkspeedGUI"
+screenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+screenGui.ResetOnSpawn = false -- Prevents the GUI from disappearing when you respawn
+
+-- Create the main frame for the GUI
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainFrame"
+mainFrame.Parent = screenGui
+mainFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+mainFrame.BorderColor3 = Color3.fromRGB(25, 25, 25)
+mainFrame.BorderSizePixel = 2
+mainFrame.Position = UDim2.new(0.5, -150, 0.5, -75)
+mainFrame.Size = UDim2.new(0, 300, 0, 150)
+mainFrame.Active = true -- Allows the frame to be dragged
+mainFrame.Draggable = true -- Makes the frame draggable
+
+-- Create a title label
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Name = "TitleLabel"
+titleLabel.Parent = mainFrame
+titleLabel.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+titleLabel.BorderSizePixel = 0
+titleLabel.Size = UDim2.new(1, 0, 0, 30)
+titleLabel.Font = Enum.Font.SourceSansBold
+titleLabel.Text = "Walkspeed Controller"
+titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+titleLabel.TextSize = 18
+
+-- Create a label to show the current speed
+local speedDisplay = Instance.new("TextLabel")
+speedDisplay.Name = "SpeedDisplay"
+speedDisplay.Parent = mainFrame
+speedDisplay.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+speedDisplay.BorderSizePixel = 0
+speedDisplay.Position = UDim2.new(0, 0, 0, 40)
+speedDisplay.Size = UDim2.new(1, 0, 0, 30)
+speedDisplay.Font = Enum.Font.SourceSans
+speedDisplay.Text = "Speed: 16" -- Default speed
+speedDisplay.TextColor3 = Color3.fromRGB(255, 255, 255)
+speedDisplay.TextSize = 16
+
+-- Create the slider background
+local sliderBackground = Instance.new("Frame")
+sliderBackground.Name = "SliderBackground"
+sliderBackground.Parent = mainFrame
+sliderBackground.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+sliderBackground.BorderColor3 = Color3.fromRGB(20, 20, 20)
+sliderBackground.Position = UDim2.new(0.5, -125, 0, 90)
+sliderBackground.Size = UDim2.new(0, 250, 0, 20)
+
+-- Create the slider handle
+local sliderHandle = Instance.new("TextButton")
+sliderHandle.Name = "SliderHandle"
+sliderHandle.Parent = sliderBackground
+sliderHandle.BackgroundColor3 = Color3.fromRGB(0, 122, 255)
+sliderHandle.BorderColor3 = Color3.fromRGB(0, 80, 170)
+sliderHandle.Position = UDim2.new(0, 0, 0.5, -10) -- Start at the beginning
+sliderHandle.Size = UDim2.new(0, 20, 0, 20)
+sliderHandle.Text = ""
+
+-- Script variables
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+
+local minSpeed = 15
+local maxSpeed = 100
+local isDragging = false
+
+-- Function to update speed based on slider position
+local function updateSpeed()
+    -- Calculate the percentage of the handle's position
+    local percentage = sliderHandle.Position.X.Offset / (sliderBackground.Size.X.Offset - sliderHandle.Size.X.Offset)
+    percentage = math.clamp(percentage, 0, 1) -- Ensure it's between 0 and 1
+
+    -- Calculate the speed
+    local speed = minSpeed + (maxSpeed - minSpeed) * percentage
+    humanoid.WalkSpeed = speed
+
+    -- Update the display
+    speedDisplay.Text = "Speed: " .. string.format("%.0f", speed)
+end
+
+-- Handle dragging logic
+sliderHandle.MouseButton1Down:Connect(function()
+    isDragging = true
+end)
+
+game:GetService("UserInputService").InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        isDragging = false
+    end
+end)
+
+game:GetService("UserInputService").InputChanged:Connect(function(input)
+    if isDragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        -- Get mouse position relative to the slider background
+        local mouseLocation = game:GetService("UserInputService"):GetMouseLocation()
+        local relativePosition = mouseLocation.X - sliderBackground.AbsolutePosition.X - (sliderHandle.AbsoluteSize.X / 2)
+
+        -- Clamp the position to stay within the background
+        local minPos = 0
+        local maxPos = sliderBackground.AbsoluteSize.X - sliderHandle.AbsoluteSize.X
+        relativePosition = math.clamp(relativePosition, minPos, maxPos)
+
+        -- Update the handle's position
+        sliderHandle.Position = UDim2.new(0, relativePosition, 0.5, -10)
+        
+        -- Update the player's speed
+        updateSpeed()
+    end
+end)
+
+-- Set initial speed
+updateSpeed()
