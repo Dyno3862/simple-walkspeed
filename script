@@ -1,8 +1,17 @@
+-- This script uses a more advanced method (hookmetamethod) to ensure walkspeed changes stick,
+-- even if the game has scripts trying to reset it.
+
+-- Ensure the script doesn't error if hookmetamethod isn't available in your executor
+if not hookmetamethod then
+    print("Your script executor does not support hookmetamethod. This script may not work correctly.")
+    return
+end
+
 -- Create the main GUI container
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "WalkspeedGUI"
 screenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
-screenGui.ResetOnSpawn = false -- Prevents the GUI from disappearing when you respawn
+screenGui.ResetOnSpawn = false
 
 -- Create the main frame for the GUI
 local mainFrame = Instance.new("Frame")
@@ -13,10 +22,8 @@ mainFrame.BorderColor3 = Color3.fromRGB(25, 25, 25)
 mainFrame.BorderSizePixel = 2
 mainFrame.Position = UDim2.new(0.5, -150, 0.5, -75)
 mainFrame.Size = UDim2.new(0, 300, 0, 150)
-mainFrame.Active = true -- Allows the frame to be dragged
-mainFrame.Draggable = true -- Makes the frame draggable
 
--- Create a title label
+-- Create a title label which will also act as the drag handle
 local titleLabel = Instance.new("TextLabel")
 titleLabel.Name = "TitleLabel"
 titleLabel.Parent = mainFrame
@@ -37,7 +44,7 @@ speedDisplay.BorderSizePixel = 0
 speedDisplay.Position = UDim2.new(0, 0, 0, 40)
 speedDisplay.Size = UDim2.new(1, 0, 0, 30)
 speedDisplay.Font = Enum.Font.SourceSans
-speedDisplay.Text = "Speed: 16" -- Default speed
+speedDisplay.Text = "Speed: 16"
 speedDisplay.TextColor3 = Color3.fromRGB(255, 255, 255)
 speedDisplay.TextSize = 16
 
@@ -56,62 +63,115 @@ sliderHandle.Name = "SliderHandle"
 sliderHandle.Parent = sliderBackground
 sliderHandle.BackgroundColor3 = Color3.fromRGB(0, 122, 255)
 sliderHandle.BorderColor3 = Color3.fromRGB(0, 80, 170)
-sliderHandle.Position = UDim2.new(0, 0, 0.5, -10) -- Start at the beginning
+sliderHandle.Position = UDim2.new(0, 0, 0.5, -10)
 sliderHandle.Size = UDim2.new(0, 20, 0, 20)
 sliderHandle.Text = ""
 
--- Script variables
+-- Script services and variables
+local UserInputService = game:GetService("UserInputService")
 local player = game.Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local humanoid = character:WaitForChild("Humanoid")
-
 local minSpeed = 15
-local maxSpeed = 100
-local isDragging = false
+local maxSpeed = 39 -- Set max speed to 39
+local targetSpeed = 16
+local isSliderDragging = false
 
--- Function to update speed based on slider position
-local function updateSpeed()
-    -- Calculate the percentage of the handle's position
-    local percentage = sliderHandle.Position.X.Offset / (sliderBackground.Size.X.Offset - sliderHandle.Size.X.Offset)
-    percentage = math.clamp(percentage, 0, 1) -- Ensure it's between 0 and 1
-
-    -- Calculate the speed
-    local speed = minSpeed + (maxSpeed - minSpeed) * percentage
-    humanoid.WalkSpeed = speed
-
-    -- Update the display
-    speedDisplay.Text = "Speed: " .. string.format("%.0f", speed)
-end
-
--- Handle dragging logic
-sliderHandle.MouseButton1Down:Connect(function()
-    isDragging = true
+-- =================================================================
+-- Custom Draggable Frame Logic
+-- =================================================================
+local isFrameDragging = false
+local dragStart
+local startPos
+titleLabel.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        isFrameDragging = true
+        dragStart = input.Position
+        startPos = mainFrame.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then isFrameDragging = false end
+        end)
+    end
 end)
-
-game:GetService("UserInputService").InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        isDragging = false
+titleLabel.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        if isFrameDragging then
+            local delta = input.Position - dragStart
+            mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
     end
 end)
 
-game:GetService("UserInputService").InputChanged:Connect(function(input)
-    if isDragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-        -- Get mouse position relative to the slider background
-        local mouseLocation = game:GetService("UserInputService"):GetMouseLocation()
-        local relativePosition = mouseLocation.X - sliderBackground.AbsolutePosition.X - (sliderHandle.AbsoluteSize.X / 2)
+-- =================================================================
+-- Update Target Speed Function
+-- =================================================================
+local function updateTargetSpeed()
+    local percentage = sliderHandle.Position.X.Offset / (sliderBackground.Size.X.Offset - sliderHandle.Size.X.Offset)
+    percentage = math.clamp(percentage, 0, 1)
+    local speed = minSpeed + (maxSpeed - minSpeed) * percentage
+    targetSpeed = speed
+    speedDisplay.Text = "Speed: " .. string.format("%.0f", speed)
+    
+    -- Also apply the speed directly here just in case
+    if player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
+        player.Character.Humanoid.WalkSpeed = targetSpeed
+    end
+end
 
-        -- Clamp the position to stay within the background
+-- =================================================================
+-- Slider Dragging Logic
+-- =================================================================
+sliderHandle.MouseButton1Down:Connect(function() isSliderDragging = true end)
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then isSliderDragging = false end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if isSliderDragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local mouseLocation = UserInputService:GetMouseLocation()
+        local relativePosition = mouseLocation.X - sliderBackground.AbsolutePosition.X - (sliderHandle.AbsoluteSize.X / 2)
         local minPos = 0
         local maxPos = sliderBackground.AbsoluteSize.X - sliderHandle.AbsoluteSize.X
         relativePosition = math.clamp(relativePosition, minPos, maxPos)
-
-        -- Update the handle's position
         sliderHandle.Position = UDim2.new(0, relativePosition, 0.5, -10)
-        
-        -- Update the player's speed
-        updateSpeed()
+        updateTargetSpeed()
     end
 end)
 
+-- =================================================================
+-- FIX: Walkspeed Enforcement using hookmetamethod
+-- =================================================================
+-- This is the core of the fix. We intercept any attempt to change a property on the Humanoid.
+local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+if humanoid then
+    local oldIndex
+    oldIndex = hookmetamethod(game, "__newindex", function(self, index, value)
+        -- Check if the object being changed is a Humanoid and the property is WalkSpeed
+        if self:IsA("Humanoid") and index == "WalkSpeed" then
+            -- If the game is trying to set the speed to something other than our target,
+            -- we force it to set it to our targetSpeed instead.
+            if value ~= targetSpeed then
+                return oldIndex(self, index, targetSpeed)
+            end
+        end
+        -- For any other property, let it change normally.
+        return oldIndex(self, index, value)
+    end)
+end
+
+-- We also need to re-apply the hook if the player respawns
+player.CharacterAdded:Connect(function(character)
+    local humanoid = character:WaitForChild("Humanoid")
+    local oldIndex
+    oldIndex = hookmetamethod(game, "__newindex", function(self, index, value)
+        if self:IsA("Humanoid") and index == "WalkSpeed" then
+            if value ~= targetSpeed then
+                return oldIndex(self, index, targetSpeed)
+            end
+        end
+        return oldIndex(self, index, value)
+    end)
+    -- Set the speed on the new character
+    humanoid.WalkSpeed = targetSpeed
+end)
+
+
 -- Set initial speed
-updateSpeed()
+updateTargetSpeed()
